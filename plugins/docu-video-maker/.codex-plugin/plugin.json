@@ -1,0 +1,26 @@
+{
+  "name": "docu-video-maker",
+  "version": "1.0.0",
+  "description": "参考の YouTube チャンネルや動画から作風を読み取り、名画・AI画像・地図・ナレーション・テロップのドキュメンタリー風解説動画やPVを After Effects なしで MP4 まで作る。",
+  "author": {
+    "name": "fuuuuuuma",
+    "url": "https://github.com/fuuuuuuma"
+  },
+  "repository": "https://github.com/fuuuuuuma/docu-video-maker",
+  "license": "MIT",
+  "keywords": ["youtube", "documentary", "history", "explainer-video", "pv", "elevenlabs", "higgsfield", "ffmpeg"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Docu Video Maker",
+    "shortDescription": "参考動画から解説動画・PVをMP4まで",
+    "longDescription": "YouTube チャンネルや参考動画の URL を渡すと、作風を分析して叩き台と構成案を出し、短い質問で前提をそろえてから、台本・ナレーション・BGM・名画とAI素材・地図・テロップを組み立てて MP4 まで仕上げます。サムネイル・タイトル・概要欄の一式も作ります。",
+    "developerName": "fuuuuuuma",
+    "category": "Productivity",
+    "capabilities": ["Write"],
+    "defaultPrompt": [
+      "このチャンネルみたいな解説動画を作りたい https://www.youtube.com/@xxxx",
+      "この参考動画の感じで、3分のPVを作って https://youtu.be/xxxx"
+    ],
+    "brandColor": "#8C1C13"
+  }
+}

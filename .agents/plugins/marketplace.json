@@ -1,0 +1,20 @@
+{
+  "name": "docu-video-maker",
+  "interface": {
+    "displayName": "Docu Video Maker"
+  },
+  "plugins": [
+    {
+      "name": "docu-video-maker",
+      "source": {
+        "source": "local",
+        "path": "./plugins/docu-video-maker"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

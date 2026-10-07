@@ -1,0 +1,6 @@
+numpy
+pillow
+opencv-python
+# 任意：絵を深度で立体的に動かす（無ければ寄り・パンだけで動く）
+# torch
+# transformers

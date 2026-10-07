@@ -1,0 +1,13 @@
+{
+  "name": "docu-video-maker",
+  "description": "参考の YouTube チャンネルや動画から、ドキュメンタリー風の解説動画・PV を MP4 まで作るスキル",
+  "owner": {
+    "name": "fuuuuuuma"
+  },
+  "plugins": [
+    {
+      "name": "docu-video-maker",
+      "source": "./plugins/docu-video-maker"
+    }
+  ]
+}

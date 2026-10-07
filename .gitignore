@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+# 鍵や制作物は入れない
+.env
+api_key
+*.mp4
+*.wav
+*.mp3

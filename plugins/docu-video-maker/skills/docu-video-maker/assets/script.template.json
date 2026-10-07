@@ -1,0 +1,29 @@
+{
+ "slug": "ep01_example",
+ "series": "チャンネル名",
+ "title_main": "動画の題（扉に大きく出る）",
+ "title_sub": "副題（句読点なし）",
+ "title_bg": "T_title",
+ "voice": {"provider": "elevenlabs", "id": "", "model": "eleven_v3", "seed": 1789},
+ "bgm": {"provider": "elevenlabs"},
+ "cards": {"title": true, "chapters": true, "end": true},
+ "pace": "normal",
+ "image_style": "Cinematic historical oil painting in the manner of late 18th-century European academic history painting, dramatic chiaroscuro, dark moody palette of deep navy blue, charcoal and candle-gold with blood-red accents, visible painterly brushstrokes, subtle film grain, widescreen 16:9. No text, no letters, no captions, no watermark.",
+ "subtitles": true,
+ "lines": [
+  {"id": "d1", "sec": "digest", "text": "ダイジェストの1文目。動画の山場を先に見せる。", "scene": "pd_example", "caption": "見出し", "red": "見出し", "fx": true},
+  {"id": "c1", "sec": "ch1", "chapter": "第1章　章の名前", "text": "本編の1文目。", "scene": "i_example", "year": "1789"},
+  {"id": "c2", "sec": "ch1", "text": "地図で場所を見せる文。", "scene": "m_example", "tts": "読み違える語だけ、ここに読みを書く"},
+  {"id": "s1", "sec": "summary", "text": "まとめの1文目。", "scene": "v_example"}
+ ],
+ "scenes": {
+  "pd_example": {"kind": "pd", "desc": "作品名（作者、年）。画面に何が写っているか"},
+  "i_example": {"kind": "ai_image", "desc": "AI 画像で見せる場面の説明"},
+  "v_example": {"kind": "ai_video", "desc": "AI 動画で見せる場面の説明（無ければ同名の静止画）"},
+  "m_example": {"kind": "map", "desc": "地図", "map": {
+   "view_from": [-5, 42, 10, 52], "view_to": [0, 46, 6, 50],
+   "points": [{"name": "パリ", "lon": 2.35, "lat": 48.86, "at": 0.3}, {"name": "ウィーン", "lon": 16.37, "lat": 48.21, "at": 0.9}],
+   "routes": [{"from": "パリ", "to": "ウィーン", "at": 1.0, "dur": 2.0}]}},
+  "black": {"kind": "black", "desc": "黒（締めの前など）"}
+ }
+}

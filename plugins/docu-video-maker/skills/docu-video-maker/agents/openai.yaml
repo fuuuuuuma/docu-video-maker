@@ -1,0 +1,7 @@
+interface:
+  display_name: "Docu Video Maker"
+  short_description: "参考の YouTube から、ドキュメンタリー風の解説動画・PVをMP4まで作る"
+  brand_color: "#8C1C13"
+  default_prompt: "Use $docu-video-maker to 参考の YouTube チャンネルや動画の作風で、解説動画を MP4 まで作ってください。"
+policy:
+  allow_implicit_invocation: true
