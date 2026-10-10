@@ -71,14 +71,22 @@ python3 <このスキル>/scripts/new_episode.py <作業フォルダ> <slug>
 
 集め方・作り方・落とし穴は [references/assets.md](references/assets.md)。
 
-### 6. 音と映像を組み立てる
+### 6. 音を作り、書き出す前にプレビューで見せる
 
 ```bash
 cd <このスキル>/scripts
-python3 audio.py tts <回>          # 読み上げ（1文ずつ）
+python3 audio.py tts <回>          # 読み上げ（1文ずつ・同時2本）
 python3 timeline.py <回>           # 読み上げの実測から時刻表
 python3 audio.py sfx               # 効果音（初回だけ・ElevenLabs がある場合）
-python3 audio.py bgm <回> v1       # BGM（ElevenLabs がある場合）
+python3 audio.py bgm <回> v1       # BGM（ElevenLabs がある場合。作り置きの曲なら script.json の "bgm": {"file": …}）
+python3 preview.py <回> --serve    # 数秒でプレビューを作り、http://localhost:8765/preview.html で再生
+```
+
+プレビューは動画ファイルを作らず、ブラウザが絵・溶け・テロップ・年号・扉・BGM の下げ方・効果音を時刻表どおりにその場で再生する（15分の回で作るのに約3秒）。テロップと年号は書き出しと同じ画像を使う。違うのは、深度による立体化と画面の粒子だけ（平らな寄り・パンで代わりに見せる）。**カット表や台本の直しは、プレビューで作り手に見せて決める**。書き出しの待ち時間を、直しの往復に入れない。サーバーは Range（途中からの読み出し）に答えるので、章へ飛んでも動画と BGM が合う。
+
+### 6b. 書き出す（プレビューで承認が出てから）
+
+```bash
 python3 audio.py mix <回> v1       # 声・BGM・効果音を -14 LUFS に
 python3 shots.py <回>              # カットと扉（同時に何本も作る）
 python3 assemble.py <回> v1        # つないでテロップ・年号・音を重ね、exports/ へ

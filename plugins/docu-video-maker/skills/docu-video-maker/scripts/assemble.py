@@ -87,21 +87,9 @@ def build_chunk(args):
     return str(out), clen
 
 
-def main():
-    ep_dir, ver = sys.argv[1], sys.argv[2]
-    ep, S = load_ep(ep_dir)
-    if "--audio" in sys.argv:
-        audio = sys.argv[sys.argv.index("--audio") + 1]
-    else:
-        cands = [ep / f"audio/mix_{ver}.wav"] + sorted((ep / "audio").glob("mix_*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
-        found = [c for c in cands if c.exists()]
-        if not found and "--no-audio" not in sys.argv:
-            raise SystemExit("音のファイル（audio/mix_*.wav）がありません。audio.py mix を先に流すか --no-audio を付けてください")
-        audio = str(found[0].relative_to(ep)) if found else None
-        print("音:", audio)
-    TL = json.loads((ep / "timeline.json").read_text())
-    seq = json.loads((ep / "shots_plan.json").read_text())
-    (ep / "chunks").mkdir(exist_ok=True); (ep / "cache/cap").mkdir(parents=True, exist_ok=True); (ep / "cache/year").mkdir(parents=True, exist_ok=True)
+def prepare_overlays(ep, S, TL):
+    """字幕・演出テロップ・年号の画像を cache/ に作り、出す時刻を付けた行と年号の区間を返す（書き出しとプレビューで共用）。"""
+    (ep / "cache/cap").mkdir(parents=True, exist_ok=True); (ep / "cache/year").mkdir(parents=True, exist_ok=True)
     # 字幕・年号の画像
     lines = TL["lines"]
     latest = {x["id"]: x for x in S["lines"]}
@@ -168,6 +156,25 @@ def main():
     for (_, _, y) in years:
         if y:
             year_bar_image(y)[0].save(ep / "cache/year" / f"{y}.png")
+    return lines, years
+
+
+def main():
+    ep_dir, ver = sys.argv[1], sys.argv[2]
+    ep, S = load_ep(ep_dir)
+    if "--audio" in sys.argv:
+        audio = sys.argv[sys.argv.index("--audio") + 1]
+    else:
+        cands = [ep / f"audio/mix_{ver}.wav"] + sorted((ep / "audio").glob("mix_*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
+        found = [c for c in cands if c.exists()]
+        if not found and "--no-audio" not in sys.argv:
+            raise SystemExit("音のファイル（audio/mix_*.wav）がありません。audio.py mix を先に流すか --no-audio を付けてください")
+        audio = str(found[0].relative_to(ep)) if found else None
+        print("音:", audio)
+    TL = json.loads((ep / "timeline.json").read_text())
+    seq = json.loads((ep / "shots_plan.json").read_text())
+    (ep / "chunks").mkdir(exist_ok=True)
+    lines, years = prepare_overlays(ep, S, TL)
     chunks = chunks_of(seq)
     jobs = [(str(ep), k, ch, lines, years) for k, ch in enumerate(chunks)]
     with ProcessPoolExecutor(4) as ex:

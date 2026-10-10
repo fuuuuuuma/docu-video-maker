@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プレビュー</title>
+<style>
+  :root { --red: #e1221a; }
+  html, body { margin: 0; height: 100%; background: #000; color: #ddd; font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #wrap { position: absolute; inset: 0 0 64px 0; display: flex; align-items: center; justify-content: center; }
+  #stage { position: absolute; width: 1920px; height: 1080px; background: #000; overflow: hidden; transform-origin: 0 0; }
+  #band { position: absolute; z-index: 0; left: 0; width: 1920px; height: 816px; overflow: hidden; background: #000; }
+  .layer { position: absolute; inset: 0; overflow: hidden; will-change: opacity; }
+  .layer img, .layer video { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .tone { filter: brightness(.86) contrast(1.05) sepia(.06); }
+  .ov { position: absolute; will-change: opacity, transform; pointer-events: none; }
+  .card { position: absolute; inset: 0; font-family: "Hiragino Mincho ProN", "Noto Serif JP", serif; }
+  .card .t { position: absolute; left: 0; right: 0; text-align: center; line-height: 1; white-space: nowrap; text-shadow: 2px 3px 10px rgba(0,0,0,.9); }
+  .missing { position: absolute; inset: 60px; border: 3px solid #464a56; color: #cfc8be; font: 52px "Hiragino Mincho ProN", serif; padding: 300px 60px 0; background: #16181e; }
+  #vig { position: absolute; z-index: 2; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.42) 100%); }
+  #glitch { position: absolute; z-index: 3; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0 2px, rgba(0,0,0,0) 2px 4px); }
+  #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; gap: 12px; align-items: center; padding: 0 16px; background: #111; box-sizing: border-box; }
+  #bar button { background: #2a2a2e; color: #eee; border: 0; border-radius: 6px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
+  #seek { flex: 1; accent-color: var(--red); }
+  #time { font-variant-numeric: tabular-nums; font-size: 14px; min-width: 120px; }
+  #chap { max-width: 260px; background: #2a2a2e; color: #eee; border: 0; border-radius: 6px; padding: 7px; }
+  #load { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center; background: rgba(0,0,0,.82); z-index: 9; font-size: 18px; }
+  #load button { font-size: 20px; padding: 14px 34px; background: var(--red); color: #fff; border: 0; border-radius: 8px; cursor: pointer; }
+  #note { position: absolute; right: 16px; top: 10px; font-size: 12px; color: #777; z-index: 5; }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage"><div id="band"></div><div id="ovs" style="position:absolute;inset:0;z-index:1"></div><div id="vig"></div><div id="glitch"></div></div></div>
+<div id="note">プレビュー（深度の立体化と粒子は書き出しで確認）</div>
+<div id="bar">
+  <button id="pp">再生</button>
+  <span id="time">0:00 / 0:00</span>
+  <input id="seek" type="range" min="0" max="1000" value="0" step="0.1">
+  <select id="chap"></select>
+</div>
+<div id="load"><div id="msg">読み込み中…</div><button id="go" hidden>再生する</button></div>
+<script>
+const D = /*DATA*/null;
+const W = 1920, H = 816, BAR = D.bar, XF = D.xf;
+const MOTIONS = ["push", "panR", "pull", "panL", "tilt", "push2"];
+const $ = (s) => document.querySelector(s);
+const band = $("#band"), ovs = $("#ovs"), stage = $("#stage");
+band.style.top = BAR + "px";
+const ease = (x) => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, x)));
+const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+// 画面の大きさに合わせる
+function fit() {
+  const r = $("#wrap").getBoundingClientRect();
+  const k = Math.min(r.width / 1920, r.height / 1080);
+  stage.style.transform = `scale(${k})`;
+  stage.style.left = (r.width - 1920 * k) / 2 + "px";
+  stage.style.top = (r.height - 1080 * k) / 2 + "px";
+}
+addEventListener("resize", fit); fit();
+
+// ---------- 絵 ----------
+const live = new Map();   // idx -> {el, item}
+function makeShot(it) {
+  const el = document.createElement("div");
+  el.className = "layer";
+  if (it.kind === "card") { el.appendChild(makeCard(it)); }
+  else if (it.kind === "black") { el.style.background = "#000"; }
+  else if (it.kind === "missing") { const m = document.createElement("div"); m.className = "missing"; m.textContent = "［素材なし］" + it.label; el.appendChild(m); }
+  else if (it.kind === "video") {
+    const v = document.createElement("video");
+    v.src = it.src; v.muted = true; v.playsInline = true; v.preload = "auto";
+    if (!it.still) v.className = "tone";
+    v.addEventListener("loadedmetadata", () => {
+      const ar = v.videoWidth / v.videoHeight, k = Math.max(W / v.videoWidth, H / v.videoHeight);
+      it._vw = v.videoWidth * k; it._vh = v.videoHeight * k; it._ar = ar;
+      it._rate = it.still ? 1 : 1 / Math.max(1, it.len / Math.max(1, v.duration - 0.15));
+      v.style.width = it._vw + "px"; v.style.height = it._vh + "px";
+      if (ar < 1.3) {   // 縦長の動画：ぼかした地＋高さいっぱい
+        const bg = v.cloneNode(); bg.style.filter = "blur(28px) brightness(.62)"; bg.muted = true;
+        el.insertBefore(bg, v); it._bg = bg;
+        const fh = H * 0.94, fw = fh * ar; v.style.width = fw + "px"; v.style.height = fh + "px";
+        v.style.left = (W - fw) / 2 + "px"; v.style.top = (H - fh) / 2 + "px"; it._portrait = true;
+        bg.style.width = it._vw + "px"; bg.style.height = it._vh + "px";
+      }
+    });
+    el.appendChild(v); it._v = v;
+  } else if (it.kind === "image") {
+    const ar = it.ar;
+    if (ar < 1.3) {
+      const mi = MOTIONS.indexOf(it.motion);
+      if (it.part === 0 && mi % 2 === 1) {   // 縦長その2：横幅いっぱいに広げて上から下へなめる
+        const img = new Image(); img.src = it.src; img.className = "tone";
+        const bw = W * 1.04, bh = bw / ar; img.style.width = bw + "px"; img.style.height = bh + "px";
+        it._mode = "sweep"; it._bw = bw; it._bh = bh; el.appendChild(img); it._img = img;
+      } else {   // 縦長：ぼかした地＋額のように置いて寄る
+        const bg = new Image(); bg.src = it.src; bg.className = "tone";
+        const k = Math.max(W * 1.1 / (ar * 1000), H * 1.1 / 1000);
+        bg.style.width = ar * 1000 * k + "px"; bg.style.height = 1000 * k + "px";
+        bg.style.left = (W - ar * 1000 * k) / 2 + "px"; bg.style.top = (H - 1000 * k) / 2 + "px";
+        bg.style.filter = "blur(28px) brightness(.38)";
+        const holder = document.createElement("div"); holder.style.cssText = "position:absolute;inset:0;transform-origin:0 0";
+        const fh = H * 0.88, fw = fh * ar;
+        const fx0 = (W - fw) / 2 + [0, -W * 0.2, W * 0.2][(it.part === 0 ? mi : it.part) % 3], fy0 = (H - fh) / 2 + 20;
+        const fg = new Image(); fg.src = it.src; fg.className = "tone";
+        fg.style.cssText += `width:${fw}px;height:${fh}px;left:${fx0}px;top:${fy0}px;box-shadow:10px -6px 36px rgba(0,0,0,.8)`;
+        holder.appendChild(bg); holder.appendChild(fg); el.appendChild(holder);
+        it._mode = "frame"; it._holder = holder; it._cxf = fx0 + fw / 2;
+      }
+    } else {   // 横長：寄る・引く・パン（書き出しでは深度で立体的に動く）
+      const img = new Image(); img.src = it.src; img.className = "tone";
+      const base = [1.18, 1.6, 1.6, 1.45][it.part % 4];
+      const iw = Math.max(W * base, H * base * ar), ih = iw / ar;
+      img.style.width = iw + "px"; img.style.height = ih + "px";
+      it._mode = "wide"; it._iw = iw; it._ih = ih; it._img = img; el.appendChild(img);
+    }
+  }
+  return el;
+}
+
+function poseShot(it, t) {
+  const p = (t - it.start) / it.len, e = ease(p);
+  if (it.kind === "video" && it._v) {
+    const v = it._v;
+    const want = (t - it.start) * (it._rate || 1);
+    if (playing) {
+      if (v.paused) { v.currentTime = Math.min(want, (v.duration || 99) - 0.05); v.playbackRate = it._rate || 1; v.play().catch(() => {}); }
+      else if (Math.abs(v.currentTime - want) > 0.35) v.currentTime = want;
+      if (it._bg) { if (it._bg.paused) { it._bg.currentTime = v.currentTime; it._bg.playbackRate = v.playbackRate; it._bg.play().catch(() => {}); } }
+    } else { if (!v.paused) v.pause(); if (Math.abs(v.currentTime - want) > 0.05) v.currentTime = want; }
+    if (!it._portrait && it._vw) {
+      const z = (it.motion === "push" || it.motion === "push2") && !it.still ? 1 + 0.06 * e : 1;
+      v.style.transform = `translate(${(W - it._vw * z) / 2}px, ${(H - it._vh * z) / 2}px) scale(${z})`;
+    }
+    return;
+  }
+  if (it._mode === "wide") {
+    const [ox, oy] = [[0, 0], [-0.3, -0.12], [0.3, 0.05], [0, -0.25]][it.part % 4];
+    let z = 1, dx = 0, dy = 0;
+    switch (it.motion) {
+      case "push": z = 1 + 0.08 * e; break;
+      case "pull": z = 1.08 - 0.08 * e; break;
+      case "panR": z = 1.02; dx = (-0.5 + e) * 0.08; break;
+      case "panL": z = 1.02; dx = (0.5 - e) * 0.08; break;
+      case "tilt": z = 1.02; dy = (0.5 - e) * 0.08; break;
+      default: z = 1.03 + 0.07 * e; dx = -0.02 * e;
+    }
+    const iw = it._iw * z, ih = it._ih * z;
+    const cx = iw / 2 + (iw - W) * ox * 0.5 + iw * dx, cy = ih / 2 + (ih - H) * oy * 0.5 + ih * dy;
+    const x = Math.min(0, Math.max(W - iw, W / 2 - cx)), y = Math.min(0, Math.max(H - ih, H / 2 - cy));
+    it._img.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
+    it._img.style.width = it._iw + "px";
+  } else if (it._mode === "sweep") {
+    const [ya, yb] = it.motion !== "panL" ? [0.30, 0.42] : [0.42, 0.30];
+    let cy = it._bh * (ya + (yb - ya) * e); cy = Math.min(Math.max(cy, H / 2), it._bh - H / 2);
+    it._img.style.transform = `translate(${-(it._bw - W) / 2}px, ${H / 2 - cy}px)`;
+  } else if (it._mode === "frame") {
+    const [z0, z1, fy] = [[1.0, 1.08, 0.5], [1.55, 1.68, 0.30], [1.10, 1.0, 0.5], [1.35, 1.45, 0.62]][it.part % 4];
+    const z = z0 + (z1 - z0) * e, cy = H * fy;
+    it._holder.style.transform = `translate(${it._cxf * (1 - z)}px, ${H / 2 - cy * z}px) scale(${z})`;
+  }
+}
+
+// ---------- 扉 ----------
+const POOL = "源平合戦裏話歴史物語記録平家源氏天下戦乱海都城武者";
+function makeCard(it) {
+  const c = document.createElement("div"); c.className = "card";
+  const add = (text, size, color, y, delay, mode) => {
+    if (!text) return;
+    const d = document.createElement("div"); d.className = "t"; d.textContent = text;
+    d.style.cssText += `font-size:${size}px;color:${color};top:${y}px;font-weight:${size >= 100 ? 600 : 400}`;
+    d.dataset.delay = delay; d.dataset.mode = mode || ""; d.dataset.text = text; c.appendChild(d);
+  };
+  if (it.type === "title") {
+    if (D.title.bg) { const b = new Image(); b.src = D.title.bg; b.style.cssText = `position:absolute;left:0;top:${-(1080 * 1.08 - H) / 2}px;width:${W * 1.08}px;height:${1080 * 1.08}px;filter:brightness(.55)`; b.className = "bgz"; c.appendChild(b); }
+    add(D.title.series, 40, "#e6decd", 330 - BAR, 0.4); add(D.title.main, 150, "#f7f5ee", 470 - BAR, 0, "decode"); add(D.title.sub, 58, "#f7f5ee", 650 - BAR, 0.9);
+  } else if (it.type === "chapter") {
+    c.style.background = "radial-gradient(ellipse at 50% 45%, #1b1f29 0%, #090b11 75%)";
+    const parts = it.label.split("　");
+    if (parts.length > 1) add(parts[0], 40, "var(--red)", 420 - BAR, 0);
+    add(parts[parts.length - 1], 140, "#f7f5ee", 520 - BAR, 0.12, "decode");
+    const ln = document.createElement("div"); ln.className = "rl"; ln.style.cssText = `position:absolute;top:${690 - BAR}px;left:960px;height:3px;background:var(--red);width:0`; c.appendChild(ln);
+  } else {
+    c.style.background = "radial-gradient(ellipse at 50% 45%, #1b1f29 0%, #090b11 75%)";
+    add(D.title.series, 40, "#d2cdc3", 600 - BAR, 0.4); add(D.title.main, 110, "#f7f5ee", 470 - BAR, 0.1);
+  }
+  return c;
+}
+function poseCard(it, el, t) {
+  const tt = t - it.start, dur = it.len;
+  el.querySelectorAll(".t").forEach((d) => {
+    const delay = +d.dataset.delay;
+    let a = Math.min(1, Math.max(0, (tt - delay) / 0.35));
+    if (tt > dur - 0.35) a *= Math.max(0, (dur - tt) / 0.35);
+    d.style.opacity = a;
+    if (d.dataset.mode === "decode") {
+      const s = d.dataset.text; let out = "";
+      for (let k = 0; k < s.length; k++) out += tt - delay > 0.10 + 0.06 * k ? s[k] : POOL[(k * 7 + Math.floor(tt * 30)) % POOL.length];
+      d.textContent = out;
+    }
+  });
+  const bg = el.querySelector(".bgz"); if (bg) bg.style.transform = `scale(${1 + 0.05 * tt / dur})`;
+  const ln = el.querySelector(".rl");
+  if (ln) { const k = ease((tt - 0.3) / 0.5); ln.style.width = 440 * k + "px"; ln.style.left = 960 - 220 * k + "px"; }
+}
+
+// ---------- テロップ・年号 ----------
+const overlays = [];
+for (const s of D.subs) overlays.push({ ...s, fd: 0.1 });
+for (const s of D.caps) overlays.push({ ...s, fd: s.anim === "fade" ? 0.35 : 0.3 });
+for (const s of D.years) overlays.push({ ...s, fd: 0 });
+for (const o of overlays) {
+  const im = new Image(); im.src = o.src; im.className = "ov"; im.style.left = o.x + "px"; im.style.top = o.y + "px"; im.style.opacity = 0;
+  ovs.appendChild(im); o.el = im;
+}
+function poseOverlays(t) {
+  for (const o of overlays) {
+    if (t < o.a || t > o.b) { if (o.el.style.opacity !== "0") o.el.style.opacity = 0; continue; }
+    let a = 1;
+    if (o.fd) a = Math.min(1, (t - o.a) / o.fd, (o.b - t) / o.fd);
+    o.el.style.opacity = Math.max(0, a);
+    const k = Math.pow(Math.max(0, 1 - (t - o.a) / 0.35), 2);
+    if (o.anim === "slideL") o.el.style.transform = `translateX(${-36 * k}px)`;
+    else if (o.anim === "slideR") o.el.style.transform = `translateX(${36 * k}px)`;
+  }
+}
+
+// ---------- 乱れ（扉の前後と赤い語） ----------
+function poseGlitch(t) {
+  const on = D.hits.some((h) => Math.abs(t - h) < 0.10);
+  band.style.filter = on ? "drop-shadow(-12px 0 0 rgba(255,0,40,.55)) drop-shadow(12px 0 0 rgba(0,200,255,.45)) contrast(1.15)" : "";
+  band.style.transform = on ? `translate(${Math.random() * 24 - 12}px, ${Math.random() * 24 - 12}px)` : "";
+  $("#glitch").style.opacity = on ? 1 : 0;
+}
+
+// ---------- 音 ----------
+let ctx, bgmEl, bgmGain, voiceBufs = [], sfxBufs = {}, live_src = [], playing = false, t0 = 0, pos = 0;
+const db = (x) => Math.pow(10, x / 20);
+async function loadAudio() {
+  ctx = new AudioContext();
+  const get = async (src) => ctx.decodeAudioData(await (await fetch(src)).arrayBuffer());
+  let n = 0;
+  const tot = D.voice.length;
+  const q = [...D.voice.entries()];
+  async function worker() { while (q.length) { const [i, v] = q.shift(); voiceBufs[i] = await get(v.src); $("#msg").textContent = `読み上げを読み込み中… ${++n}/${tot}`; } }
+  await Promise.all([1, 2, 3, 4, 5, 6].map(worker));
+  for (const s of D.sfx) if (!sfxBufs[s.src]) sfxBufs[s.src] = await get(s.src);
+  if (D.bgm) {
+    bgmEl = new Audio(D.bgm); bgmEl.preload = "auto";
+    bgmGain = ctx.createGain(); ctx.createMediaElementSource(bgmEl).connect(bgmGain).connect(ctx.destination);
+  }
+}
+function stopAudio() { for (const s of live_src) try { s.stop(); } catch (e) {} live_src = []; if (bgmEl) bgmEl.pause(); }
+function startAudio(from) {
+  stopAudio();
+  const now = ctx.currentTime + 0.08; t0 = now - from;
+  D.voice.forEach((v, i) => {
+    const len = v.out - v.in; if (v.start + len <= from) return;
+    const off = Math.max(0, from - v.start), s = ctx.createBufferSource(); s.buffer = voiceBufs[i]; s.connect(ctx.destination);
+    s.start(t0 + v.start + off, v.in + off, len - off); live_src.push(s);
+  });
+  for (const x of D.sfx) {
+    const b = sfxBufs[x.src]; if (!b || x.t + b.duration <= from) continue;
+    const off = Math.max(0, from - x.t), g = ctx.createGain(); g.gain.value = db(x.db - 4);
+    const s = ctx.createBufferSource(); s.buffer = b; s.connect(g).connect(ctx.destination); s.start(t0 + x.t + off, off); live_src.push(s);
+  }
+  if (bgmEl) {
+    const base = db(-9), duck = db(-20), g = bgmGain.gain; g.cancelScheduledValues(0);
+    const speaking = (tt) => D.voice.some((v) => tt >= v.start - 0.1 && tt < v.start + (v.out - v.in));
+    g.setValueAtTime(speaking(from) ? duck : base, now);
+    for (const v of D.voice) {
+      const a = v.start - 0.1, b = v.start + (v.out - v.in);
+      if (b <= from) continue;
+      if (a > from) g.setTargetAtTime(duck, t0 + a, 0.04);
+      g.setTargetAtTime(base, t0 + b, 0.15);
+    }
+    bgmEl.currentTime = from; bgmEl.play().catch(() => {});
+  }
+}
+
+// ---------- 進める ----------
+const seek = $("#seek"); seek.max = D.duration;
+for (const c of D.chapters) { const o = document.createElement("option"); o.value = c.start; o.textContent = `${fmt(c.start)} ${c.label}`; $("#chap").appendChild(o); }
+$("#chap").insertAdjacentHTML("afterbegin", '<option value="">章へ移動</option>'); $("#chap").value = "";
+function now() { return playing ? ctx.currentTime - t0 : pos; }
+function play(from) { pos = from; playing = true; startAudio(from); $("#pp").textContent = "一時停止"; }
+function pause() { pos = now(); playing = false; stopAudio(); $("#pp").textContent = "再生"; }
+function jump(t) { t = Math.max(0, Math.min(D.duration, t)); if (playing) play(t); else pos = t; }
+$("#pp").onclick = () => (playing ? pause() : play(now() >= D.duration - 0.1 ? 0 : now()));
+seek.oninput = () => jump(+seek.value);
+$("#chap").onchange = (e) => { if (e.target.value !== "") jump(+e.target.value); e.target.value = ""; };
+addEventListener("keydown", (e) => {
+  if (e.code === "Space") { e.preventDefault(); $("#pp").click(); }
+  if (e.code === "ArrowRight") jump(now() + 5);
+  if (e.code === "ArrowLeft") jump(now() - 5);
+});
+
+function frame() {
+  let t = now();
+  if (playing && t >= D.duration) { pause(); pos = t = D.duration; }
+  // 前後3秒ぶんの絵だけ作る（素材を全部いっぺんに読まない）
+  D.items.forEach((it, i) => {
+    const near = t > it.start - 3 && t < it.start + it.len + 0.3;
+    if (near && !live.has(i)) { const el = makeShot(it); el.style.opacity = 0; el.style.zIndex = i; band.appendChild(el); live.set(i, el); }
+    if (!near && live.has(i)) { const el = live.get(i); el.querySelectorAll("video").forEach((v) => v.pause()); el.remove(); live.delete(i); }
+  });
+  live.forEach((el, i) => {
+    const it = D.items[i];
+    const on = t >= it.start && t < it.start + it.len;
+    if (!on) { el.style.opacity = 0; if (it._v && !it._v.paused) it._v.pause(); return; }
+    const prev = D.items[i - 1];
+    el.style.opacity = prev && prev.dissolve ? Math.min(1, (t - it.start) / XF) : 1;
+    if (it.kind === "card") poseCard(it, el, t); else poseShot(it, t);
+  });
+  poseOverlays(t); poseGlitch(t);
+  seek.value = t; $("#time").textContent = `${fmt(t)} / ${fmt(D.duration)}`;
+  requestAnimationFrame(frame);
+}
+
+loadAudio().then(() => { $("#msg").textContent = `読み込み完了（${fmt(D.duration)}・カット ${D.items.length}）`; $("#go").hidden = false; requestAnimationFrame(frame); })
+  .catch((e) => { $("#msg").textContent = "音を読み込めません。preview.py --serve で開いてください（" + e + "）"; requestAnimationFrame(frame); });
+$("#go").onclick = async () => { await ctx.resume(); $("#load").remove(); play(0); };
+</script>
+</body>
+</html>

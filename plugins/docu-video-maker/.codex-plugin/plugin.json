@@ -1,6 +1,6 @@
 {
   "name": "docu-video-maker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "参考の YouTube チャンネルや動画から作風を読み取り、名画・AI画像・地図・ナレーション・テロップのドキュメンタリー風解説動画やPVを After Effects なしで MP4 まで作る。",
   "author": {
     "name": "fuuuuuuma",

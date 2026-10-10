@@ -62,13 +62,13 @@ def cmd_tts(ep_dir):
     ep, S = load_ep(ep_dir)
     v = dict(DEFAULT_VOICE, **S.get("voice", {}))
     out = ep / "audio/lines"; out.mkdir(parents=True, exist_ok=True)
-    n = 0
-    for L in S["lines"]:
-        f = out / f"{L['id']}.mp3"
-        if f.exists():
-            continue
-        tts_one(L.get("tts", L["text"]), v, f)   # 読み違える語は tts に読みを書く
-        n += 1
+    todo = [L for L in S["lines"] if not (out / f"{L['id']}.mp3").exists()]
+    # ElevenLabs の同時に作れる本数は契約で決まる（Creator は2本）。say は手元なので4本
+    workers = int(os.environ.get("DVM_TTS_WORKERS", 2 if v.get("provider") != "say" else 4))
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(workers) as ex:   # 読み違える語は tts に読みを書く
+        list(ex.map(lambda L: tts_one(L.get("tts", L["text"]), v, out / f"{L['id']}.mp3"), todo))
+    n = len(todo)
     print("読み上げ", n, "行を作成（全", len(S["lines"]), "行）")
 
 
@@ -161,6 +161,30 @@ def load(path, a=None, b=None):
     return np.frombuffer(subprocess.run(cmd, capture_output=True, check=True).stdout, np.float32).reshape(-1, 2).copy()
 
 
+def sfx_cues(S, TL):
+    """効果音を鳴らす位置 [(名前, 秒, dB)]。扉に当てる分＋赤い語＋ script.json の \"sfx\"（書き出しとプレビューで共用）。"""
+    cues = []
+    for c in TL["cards"]:
+        if c["type"] == "title":
+            cues += [("riser", c["start"] - 3.6, -8), ("impact", c["start"], -2), ("bell_toll", c["start"] + 0.3, -8)]
+        elif c["type"] == "chapter":
+            cues += [("whoosh", c["start"] - 0.3, -6), ("impact_soft", c["start"], -4), ("paper_flip", c["end"] - 0.15, -12)]
+        elif c["type"] == "end":
+            cues += [("impact_soft", c["start"], -4), ("bell_toll", c["start"] + 0.4, -8)]
+    byid = {L["id"]: L for L in TL["lines"]}
+    latest = {x["id"]: x for x in S["lines"]}   # 見出し・赤・演出テロップは script.json の最新を使う
+    for L in TL["lines"]:
+        for key in ("caption", "red", "fx", "sfx"):
+            if key in latest.get(L["id"], {}):
+                L[key] = latest[L["id"]][key]
+    for L in TL["lines"]:
+        if L.get("red") and shows_telop(L, S):
+            cues.append(("impact_soft", L["start"] + 0.05, -8))
+        for s in L.get("sfx", []):
+            cues.append((s["name"], L["start"] + s.get("t", 0.0), s.get("gain", -8)))
+    return cues
+
+
 def cmd_mix(ep_dir, ver):
     ep, S = load_ep(ep_dir)
     TL = json.loads((ep / "timeline.json").read_text())
@@ -201,25 +225,7 @@ def cmd_mix(ep_dir, ver):
     bgm *= (db(-11) ** sm)[:, None]
     # 効果音：扉に当てる＋ script.json の "sfx":[{"name","t"}]（行IDからの相対も可）
     sfx = np.zeros((N, 2), np.float32)
-    cues = []
-    for c in TL["cards"]:
-        if c["type"] == "title":
-            cues += [("riser", c["start"] - 3.6, -8), ("impact", c["start"], -2), ("bell_toll", c["start"] + 0.3, -8)]
-        elif c["type"] == "chapter":
-            cues += [("whoosh", c["start"] - 0.3, -6), ("impact_soft", c["start"], -4), ("paper_flip", c["end"] - 0.15, -12)]
-        elif c["type"] == "end":
-            cues += [("impact_soft", c["start"], -4), ("bell_toll", c["start"] + 0.4, -8)]
-    byid = {L["id"]: L for L in TL["lines"]}
-    latest = {x["id"]: x for x in S["lines"]}   # 見出し・赤・演出テロップは script.json の最新を使う
-    for L in TL["lines"]:
-        for key in ("caption", "red", "fx", "sfx"):
-            if key in latest.get(L["id"], {}):
-                L[key] = latest[L["id"]][key]
-    for L in TL["lines"]:
-        if L.get("red") and shows_telop(L, S):
-            cues.append(("impact_soft", L["start"] + 0.05, -8))
-        for s in L.get("sfx", []):
-            cues.append((s["name"], L["start"] + s.get("t", 0.0), s.get("gain", -8)))
+    cues = sfx_cues(S, TL)
     cache = {}
     for n, t, g in cues:
         if not (LIB / f"{n}.mp3").exists():   # 効果音を作っていない環境では飛ばす
