@@ -145,6 +145,9 @@ def serve(root, port=8765):
             pass
 
         def send_head(self):
+            # 名前の付け替え（DNS rebinding）で外のサイトから読まれないよう、宛先が手元の名前の要求だけに答える
+            if self.headers.get("Host", "") not in (f"localhost:{port}", f"127.0.0.1:{port}"):
+                self.send_error(403); return None
             rng = self.headers.get("Range")
             path = self.translate_path(self.path)
             if not rng or not os.path.isfile(path):
