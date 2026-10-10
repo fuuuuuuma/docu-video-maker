@@ -238,7 +238,14 @@ let ctx, bgmEl, bgmGain, voiceBufs = [], sfxBufs = {}, live_src = [], playing = 
 const db = (x) => Math.pow(10, x / 20);
 async function loadAudio() {
   ctx = new AudioContext();
-  const get = async (src) => ctx.decodeAudioData(await (await fetch(src)).arrayBuffer());
+  // 1本が詰まっても全体が止まらないよう、8秒で打ち切って3回まで取り直す
+  const get = async (src) => {
+    for (let k = 0; ; k++) {
+      const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 8000);
+      try { const b = await (await fetch(src, { signal: ac.signal })).arrayBuffer(); clearTimeout(tm); return await ctx.decodeAudioData(b); }
+      catch (e) { clearTimeout(tm); if (k >= 2) throw e; }
+    }
+  };
   let n = 0;
   const tot = D.voice.length;
   const q = [...D.voice.entries()];
