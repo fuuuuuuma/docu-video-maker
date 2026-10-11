@@ -162,7 +162,8 @@ function poseShot(it, t) {
 }
 
 // ---------- 扉 ----------
-const POOL = "源平合戦裏話歴史物語記録平家源氏天下戦乱海都城武者";
+// 文字が入れ替わる演出に使う字は、その回の題字と章の名前から取る
+const POOL = [...new Set((D.title.main + D.title.sub + D.chapters.map((c) => c.label).join("")).replace(/[\s　0-9０-９]/g, ""))].join("") || "歴史物語記録";
 function makeCard(it) {
   const c = document.createElement("div"); c.className = "card";
   const add = (text, size, color, y, delay, mode) => {
@@ -238,19 +239,23 @@ let ctx, bgmEl, bgmGain, voiceBufs = [], sfxBufs = {}, live_src = [], playing = 
 const db = (x) => Math.pow(10, x / 20);
 async function loadAudio() {
   ctx = new AudioContext();
-  // 1本が詰まっても全体が止まらないよう、8秒で打ち切って3回まで取り直す
+  // 1本が詰まっても全体が止まらないよう、打ち切りを延ばしながら取り直す。
+  // 書き出しと同時に開くと手元のサーバーが遅くなるので、取れなかった1本は無音にして先へ進む
   const get = async (src) => {
-    for (let k = 0; ; k++) {
-      const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 8000);
+    for (const ms of [8000, 15000, 30000]) {
+      const ac = new AbortController(), tm = setTimeout(() => ac.abort(), ms);
       try { const b = await (await fetch(src, { signal: ac.signal })).arrayBuffer(); clearTimeout(tm); return await ctx.decodeAudioData(b); }
-      catch (e) { clearTimeout(tm); if (k >= 2) throw e; }
+      catch (e) { clearTimeout(tm); await new Promise((r) => setTimeout(r, ms / 4)); }   // すぐ失敗した時も間を空けて取り直す
     }
+    console.warn("読み込めなかった音:", src);
+    return null;
   };
   let n = 0;
   const tot = D.voice.length;
   const q = [...D.voice.entries()];
   async function worker() { while (q.length) { const [i, v] = q.shift(); voiceBufs[i] = await get(v.src); $("#msg").textContent = `読み上げを読み込み中… ${++n}/${tot}`; } }
   await Promise.all([1, 2, 3, 4, 5, 6].map(worker));
+  for (const [i, v] of D.voice.entries()) if (!voiceBufs[i]) voiceBufs[i] = await get(v.src);   // 取りこぼしを最後にもう一度
   for (const s of D.sfx) if (!sfxBufs[s.src]) sfxBufs[s.src] = await get(s.src);
   if (D.bgm) {
     bgmEl = new Audio(D.bgm); bgmEl.preload = "auto";
