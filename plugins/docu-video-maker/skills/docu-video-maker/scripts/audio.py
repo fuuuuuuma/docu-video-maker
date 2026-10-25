@@ -2,15 +2,16 @@
 使い方:
   python3 audio.py tts <回>            → <回>/audio/lines/<行ID>.mp3（既にあれば作らない）
   python3 audio.py sfx                 → ~/.cache/docu-video-maker/sfx/*.mp3（回をまたいで共通・1回だけ）
+  python3 audio.py sfx --from <フォルダ> [--force]  → 手持ちの効果音（効果音ラボ・Mixkit などから取ったもの）を同じ所へ取り込む
   python3 audio.py bgm <回> <版>        → <回>/audio/bgm_<版>.mp3（章の区切りに合わせて作曲）
   python3 audio.py mix <回> <版>        → <回>/audio/mix_<版>.wav（-14 LUFS）
 script.json の設定:
   "voice": {"provider": "elevenlabs", "id": "<voice_id>", "model": "eleven_v3", "seed": 1789}
            {"provider": "say", "name": "Kyoko", "rate": 190}      ← macOS の読み上げ（無料）
   "bgm":   {"provider": "elevenlabs"} / {"file": "曲のパス"} / {"provider": "none"}
-効果音は ElevenLabs の鍵があるときだけ作る。無ければミックスで飛ばす。
+効果音は ElevenLabs の鍵があるときだけ作る。無ければ --from で手持ちを取り込むか、ミックスで飛ばす。
 """
-import json, os, pathlib, subprocess, sys, tempfile
+import json, os, pathlib, re, subprocess, sys, tempfile
 import numpy as np
 from common import HOME, FF, load_ep, shows_telop
 
@@ -72,9 +73,47 @@ def cmd_tts(ep_dir):
     print("読み上げ", n, "行を作成（全", len(S["lines"]), "行）")
 
 
+AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aif", ".aiff", ".ogg", ".flac"}
+
+
+def cmd_sfx_import(src, force=False):
+    """フォルダの音を、ファイル名（拡張子なし）を効果音の名前にして取り込む。
+    頭の無音を詰め、長さを決まった秒（決まりの無い名前は10秒）までに切り、ピークを -3dB にそろえる。
+    ファイルは利用者が自分で取ってきたもの。スキルには同梱しない（効果音ラボ・Mixkit は再配布が禁止）"""
+    src = pathlib.Path(src).expanduser()
+    files = sorted(f for f in src.iterdir() if f.suffix.lower() in AUDIO_EXT) if src.is_dir() else []
+    if not files:
+        sys.exit(f"音のファイルがありません: {src}")
+    LIB.mkdir(parents=True, exist_ok=True)
+    done, skipped = [], []
+    for f in files:
+        name = f.stem.strip().lower().replace(" ", "_").replace("-", "_")
+        out = LIB / f"{name}.mp3"
+        if out.exists() and not force:
+            skipped.append(name); continue
+        sec = SFX.get(name, (10, ""))[0]
+        cut = f"aformat=channel_layouts=stereo,silenceremove=start_periods=1:start_threshold=-50dB,atrim=0:{sec},afade=t=out:st={max(0, sec - 0.3)}:d=0.3"
+        r = subprocess.run([FF, "-hide_banner", "-i", str(f), "-af", cut + ",volumedetect", "-f", "null", "-"], capture_output=True, text=True).stderr
+        m = [float(x) for x in re.findall(r"max_volume: (-?[\d.]+) dB", r)]
+        gain = -3.0 - m[-1] if m else 0.0
+        subprocess.run([FF, "-v", "error", "-y", "-i", str(f), "-af", f"{cut},volume={gain:.2f}dB", "-ar", "44100", "-ac", "2",
+                        "-c:a", "libmp3lame", "-b:a", "192k", str(out)], check=True)
+        done.append(name)
+    print("取り込み", len(done), "種:", ", ".join(done) or "なし")
+    if skipped:
+        print("既にあるので飛ばした（入れ替えるなら --force）:", ", ".join(skipped))
+    missing = [n for n in SFX if not (LIB / f"{n}.mp3").exists()]
+    if missing:
+        print("まだ無い決まりの効果音（探し方は references/audio.md の表）:", ", ".join(missing))
+
+
 def cmd_sfx():
+    if "--from" in sys.argv:
+        return cmd_sfx_import(sys.argv[sys.argv.index("--from") + 1], "--force" in sys.argv)
     if not has_key():
-        print("ElevenLabs の鍵が無いので効果音は作りません（ミックスでは飛ばします）"); return
+        print("ElevenLabs の鍵が無いので効果音は作りません（ミックスでは飛ばします）")
+        print("無料で足すなら：効果音ラボか Mixkit から取ってきた音を <名前>.mp3 にしてフォルダに集め、python3 audio.py sfx --from <フォルダ>")
+        return
     LIB.mkdir(parents=True, exist_ok=True)
     for n, (sec, text) in SFX.items():
         f = LIB / f"{n}.mp3"

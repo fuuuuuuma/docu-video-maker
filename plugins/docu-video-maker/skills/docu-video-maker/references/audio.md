@@ -19,7 +19,45 @@
 
 ## 効果音
 
-`python3 audio.py sfx` で14種（衝撃音・whoosh・riser・鐘・紙・時計・心音・羽ペン・馬車・群衆・扉・風など）を一度だけ作り、回をまたいで使う。行ごとに `"sfx": [{"name": "door_slam", "t": 0.4}]` で足せる。鍵が無ければ効果音なしで組み立てる。
+`python3 audio.py sfx` で14種（衝撃音・whoosh・riser・鐘・紙・時計・心音・羽ペン・馬車・群衆・扉・風など）を一度だけ作り、回をまたいで使う。行ごとに `"sfx": [{"name": "door_slam", "t": 0.4}]` で足せる。
+
+### ElevenLabs の鍵が無いとき（無料の効果音を取り込む）
+
+作り手に下の表の言葉で探して取ってきてもらい、`<名前>.mp3`（wav・m4a なども可）に名前を付けて 1 つのフォルダに集めてもらう。
+
+```bash
+python3 audio.py sfx --from <フォルダ>     # 既にある名前は飛ばす。入れ替えるなら --force
+```
+
+頭の無音を詰め、決まった秒までに切り、ピークを -3dB にそろえて `~/.cache/docu-video-maker/sfx/` に入れる。表に無い名前（`rain` など）もそのまま取り込めて、行の `sfx` から同じ名前で呼べる（長さは10秒まで）。足りない名前は最後に出る。
+
+| 名前 | 秒 | 効果音ラボで探す言葉 | Mixkit で探す言葉 |
+|---|---|---|---|
+| impact | 3 | 衝撃・ドーン | cinematic impact |
+| impact_soft | 3 | 重低音・ドン | deep boom |
+| whoosh | 1 | シュッ・風切り | whoosh |
+| riser | 4 | 緊張・せり上がる | riser |
+| glitch | 1 | ノイズ・グリッチ | glitch |
+| bell_toll | 5 | 教会の鐘 | church bell |
+| paper_flip | 1 | 紙をめくる | page turn |
+| tick | 2 | 時計の秒針 | clock ticking |
+| heartbeat | 3 | 心臓の鼓動 | heartbeat |
+| quill | 3 | ペンで書く | writing pen |
+| carriage | 5 | 馬車・馬の足音 | horse carriage |
+| crowd | 6 | 群衆・ざわめき | crowd |
+| door_slam | 2 | 扉を閉める・鉄の扉 | door slam |
+| wind | 6 | 風・強風 | wind howling |
+
+| 場所 | 動画での利用 | してはいけないこと |
+|---|---|---|
+| [効果音ラボ](https://soundeffect-lab.info/) | 商用・収益化した YouTube も可、クレジット不要 | 音のファイルの再配布（効果音を組み込んだテンプレート・素材集・アプリも再配布あつかい）、効果音だけを流す動画、AI 学習、Content ID などへの登録、アダルト・公序良俗に反する作品 |
+| [Mixkit](https://mixkit.co/free-sound-effects/) | 商用可、クレジット不要 | 音のファイルそのものの配布・販売（素材集にしない） |
+
+- 取るのは作り手自身（サイトの規約に同意して手で取る）。エージェントは探す言葉を出し、取ってきたファイルを使う
+- スキル・prproj・テンプレートなど**配る物には同梱しない**
+- 規約は変わるので、使う前に上のリンクで確かめる（2026-10-25 に確認）
+
+どちらも無ければ効果音なしで組み立てる。
 
 ## 演出の音（静かな間・音の受け渡し）
 

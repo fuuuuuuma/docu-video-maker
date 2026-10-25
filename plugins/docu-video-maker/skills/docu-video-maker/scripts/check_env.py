@@ -47,7 +47,10 @@ r["map_data"] = (pathlib.Path(os.environ.get("DVM_HOME", pathlib.Path.home() / "
 voice = "ElevenLabs" if r["elevenlabs_key"] else ("macOS の読み上げ（say）" if r["macos_say"] else "無し（声の手段が必要）")
 images = "名画（パブリックドメイン）＋ Higgsfield の AI 画像・動画" if r["higgsfield_cli"] else "名画（パブリックドメイン）と地図だけ"
 music = "ElevenLabs で作曲" if r["elevenlabs_key"] else "手持ちの曲か、BGM なし"
-r["mode"] = {"voice": voice, "images": images, "music": music}
+n_sfx = len(list((pathlib.Path(os.environ.get("DVM_HOME", pathlib.Path.home() / ".cache/docu-video-maker")) / "sfx").glob("*.mp3")))
+sfx = (f"取り込み・作成済み {n_sfx} 種" if n_sfx else
+       ("ElevenLabs で 14 種を作る" if r["elevenlabs_key"] else "無し（効果音ラボ・Mixkit から取って audio.py sfx --from で取り込める）"))
+r["mode"] = {"voice": voice, "images": images, "music": music, "sfx": sfx}
 fixes = []
 if not r["ffmpeg"]: fixes.append("ffmpeg を入れる: brew install ffmpeg")
 if not r["python_core"]: fixes.append(f"python の部品を入れる: python3 -m pip install -r {HERE / 'requirements.txt'}")
@@ -64,6 +67,6 @@ else:
     print(f"ffmpeg {ok(r['ffmpeg'])} / yt-dlp {ok(r['yt_dlp'])} / python の部品 {ok(r['python_core'])} / 立体化 {ok(r['depth'])} / 地図データ {ok(r['map_data'])}")
     print(f"ElevenLabs の鍵 {ok(r['elevenlabs_key'])} / Higgsfield の CLI {ok(r['higgsfield_cli'])} {r['higgsfield_credits'] or ''}")
     print("書体:", r["fonts"])
-    print("いまの環境での作り方 → 声:", voice, "／ 絵:", images, "／ BGM:", music)
+    print("いまの環境での作り方 → 声:", voice, "／ 絵:", images, "／ BGM:", music, "／ 効果音:", sfx)
     for f in fixes:
         print(" -", f)
