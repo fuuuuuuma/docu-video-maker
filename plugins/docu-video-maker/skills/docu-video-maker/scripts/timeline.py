@@ -2,6 +2,7 @@
 使い方: python3 timeline.py <回のフォルダ> [--dry]   --dry は読み上げ前に 1字0.2秒の仮の長さで組む
 構成：ダイジェスト → 題字 → 章ごとに（章の扉 → 行）→ まとめの扉 → 行 → 締め
 扉は script.json の "cards": {"title": true, "chapters": true, "end": true} で個別に外せる（短い PV は chapters を外すなど）
+行に "hush": 秒 を書くと、その行の前にその秒だけ静かな間を空ける（絵はそのまま、BGM もほぼ消える。audio.py・preview.py が読む）
 """
 import json, re, subprocess, sys
 from common import load_ep, FF
@@ -41,6 +42,7 @@ def build(ep_dir, dry=False):
                 cards.append({"type": "chapter", "label": ln.get("chapter") or "まとめ", "start": round(t, 3), "end": round(t + CARD, 3)})
                 t += CARD + 0.15
             cur = sec
+        t += ln.get("hush", 0)   # 静かな間：前の絵を残したまま、声も BGM も止める
         if dry:
             a, b = 0.0, max(0.8, len(ln["text"]) * 0.2)
         else:

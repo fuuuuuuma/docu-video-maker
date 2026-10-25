@@ -122,6 +122,7 @@ def build(ep_dir):
 
     data = {"duration": TL["duration"], "items": items, "subs": subs, "caps": caps, "years": yrs, "voice": voice,
             "bgm": bgm, "sfx": sfx, "hits": hits, "xf": shots.XF, "bar": BAR,
+            "hush": [[round(L["start"] - L["hush"], 3), round(L["start"], 3)] for L in TL["lines"] if L.get("hush")],
             "title": {"series": S.get("series", ""), "main": S.get("title_main", ""), "sub": S.get("title_sub", ""),
                       "bg": rel(shots.find_asset(ep, S.get("title_bg", "T_title"), "img")) if shots.find_asset(ep, S.get("title_bg", "T_title"), "img") else None},
             "chapters": [{"label": c.get("label") or ("題字" if c["type"] == "title" else "締め"), "start": c["start"]} for c in TL["cards"]]}

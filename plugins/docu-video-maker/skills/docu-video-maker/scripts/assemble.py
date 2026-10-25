@@ -119,7 +119,7 @@ def prepare_overlays(ep, S, TL):
             im, xy, anim = key_telop_layout(L["caption"], L.get("red"), pos)
             im.save(ep / "cache/cap" / f"{L['id']}.png"); L["cap_xy"], L["cap_anim"] = xy, anim
         if S.get("subtitles", True) is False:   # 通常テロップ（語り字幕）を出さない回
-            L["subs_t"], L["subs_xy"] = [], []
+            L["subs_t"], L["subs_xy"], L["subs_txt"] = [], [], []
             continue
         if subs.get(L["id"]):   # 要約した通常テロップ（subs.json）：下の黒帯に1行。句読点なし
             rows = [r for r in subs[L["id"]].split("\n") if r.strip()]
@@ -128,23 +128,23 @@ def prepare_overlays(ep, S, TL):
             pieces = [joined] if len(joined) <= 30 else rows
             end_all = min(L["end"] + 0.35, nxt - 0.03)
             tot = sum(len(p) for p in pieces)
-            t, L["subs_t"], L["subs_xy"] = L["start"], [], []
+            t, L["subs_t"], L["subs_xy"], L["subs_txt"] = L["start"], [], [], []
             for si, p in enumerate(pieces):
                 e = end_all if si + 1 == len(pieces) else t + (L["end"] - L["start"]) * len(p) / tot
                 im, xy = subtitle_bar_image(p)
                 im.save(ep / "cache/sub" / f"{L['id']}_{si}.png")
-                L["subs_t"].append((t, e)); L["subs_xy"].append(xy); t = e
+                L["subs_t"].append((t, e)); L["subs_xy"].append(xy); L["subs_txt"].append(p); t = e
             continue
         # 語り字幕：句読点で区切り、字数に比例した時間で出す
         pieces = split_subtitles(L["text"])
         tot = sum(len(p) for p in pieces) or 1
-        t, L["subs_t"], L["subs_xy"] = L["start"], [], []
+        t, L["subs_t"], L["subs_xy"], L["subs_txt"] = L["start"], [], [], []
         for k, p in enumerate(pieces):
             dt = (L["end"] - L["start"]) * len(p) / tot
             end = t + dt if k + 1 < len(pieces) else min(L["end"] + 0.25, nxt - 0.02)
             im, xy = subtitle_image(p)
             im.save(ep / "cache/sub" / f"{L['id']}_{k}.png")
-            L["subs_t"].append((t, end)); L["subs_xy"].append(xy); t += dt
+            L["subs_t"].append((t, end)); L["subs_xy"].append(xy); L["subs_txt"].append(p); t += dt
     years, cur = [], None
     for L in lines:
         y = L.get("year") or ""
@@ -157,6 +157,24 @@ def prepare_overlays(ep, S, TL):
         if y:
             year_bar_image(y)[0].save(ep / "cache/year" / f"{y}.png")
     return lines, years
+
+
+def screen_texts(S, TL, lines):
+    """画面に出す文字と出ている時刻（qa.py の「読み切れるか」の検査が読む）。字幕は声と一緒に出るので voice"""
+    out = []
+    for c in TL["cards"]:
+        if c["type"] == "title":
+            text = "　".join(x for x in (S.get("title_main", ""), S.get("title_sub", "")) if x)
+        else:
+            text = c.get("label", "")
+        if text:
+            out.append({"text": text, "start": c["start"], "end": c["end"], "voice": False, "kind": "題字" if c["type"] == "title" else "扉"})
+    for L in lines:
+        if L.get("show_telop"):
+            out.append({"text": L["caption"], "start": round(L["start"] + 0.05, 3), "end": round(L["hide"] - 0.02, 3), "voice": False, "kind": "演出"})
+        for (a, b), p in zip(L.get("subs_t", []), L.get("subs_txt", [])):
+            out.append({"text": p, "start": round(a, 3), "end": round(b, 3), "voice": True, "kind": "字幕"})
+    return sorted(out, key=lambda x: x["start"])
 
 
 def main():
@@ -200,6 +218,7 @@ def main():
           f"vignette=PI/5.5,noise=alls=5:allf=t,format=yuv420p")
     out = ep / "exports" / f"{S.get('slug', 'ep')}_{ver}.mp4"
     out.parent.mkdir(exist_ok=True)
+    out.with_name(f"{out.stem}_texts.json").write_text(json.dumps(screen_texts(S, TL, lines), ensure_ascii=False, indent=1))
     cmd = [FF, "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst)]
     fc = f"[0:v]{vf}[v]"
     if audio:

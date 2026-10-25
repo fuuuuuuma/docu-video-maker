@@ -223,6 +223,17 @@ def cmd_mix(ep_dir, ver):
     for i in range(0, N, 48):
         tg = env[i]; v += (tg - v) * (1 - (1 - (a1 if tg > v else r1)) ** 48); sm[i:i + 48] = v
     bgm *= (db(-11) ** sm)[:, None]
+    # 静かな間（行の "hush": 秒）：その行の前の間は BGM をほぼ消し、声と一緒に 0.6 秒で戻す
+    low, hg = db(-36), np.ones(N, np.float32)
+    for L in TL["lines"]:
+        h = L.get("hush", 0)
+        if not h:
+            continue
+        a, b = max(0, int((L["start"] - h) * SR)), int(L["start"] * SR)
+        r = max(1, min(int(0.4 * SR), (b - a) // 2))
+        e = np.concatenate([np.linspace(1, low, r), np.full(max(0, b - a - r), low), np.linspace(low, 1, int(0.6 * SR))]).astype(np.float32)
+        j = min(N, a + len(e)); hg[a:j] = np.minimum(hg[a:j], e[:j - a])
+    bgm *= hg[:, None]
     # 効果音：扉に当てる＋ script.json の "sfx":[{"name","t"}]（行IDからの相対も可）
     sfx = np.zeros((N, 2), np.float32)
     cues = sfx_cues(S, TL)

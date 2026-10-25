@@ -1,11 +1,15 @@
 """書き出した回を機械で検査し、目で見るためのコマ一覧を作る。
-使い方: python3 qa.py <回のフォルダ> <版> [--every 6]
-検査: 音の有無・音量（-14 LUFS 前後）・絵の帯の中の黒い区間・テロップの句読点・カット表の使い回し。
-出力: <回>/qa/sheet_NN.jpg（N 秒ごとのコマを 4×8 に並べたもの）。**全部の一覧を目で見る**こと。
+使い方: python3 qa.py <回のフォルダ> <版> [--every 6] [--quick]
+検査: 音の有無・音量（-14 LUFS 前後）・絵の帯の中の黒い区間・テロップの句読点・カット表の使い回し・文字が読み切れる長さか。
+出力: <回>/qa/sheet_NN.jpg（N 秒ごとのコマを 4×8 に並べたもの）
+      <回>/qa/cuts_NN.jpg（全カットの頭・中・終わり）・fast_*.jpg（動きの速い所の全コマ）。--quick ではこの2つを作らない
+**全部の一覧を目で見る**こと。見る道具の使い方は look.py。
 """
-import json, pathlib, re, shutil, subprocess, sys
+import json, os, pathlib, re, shutil, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import FF, FFPROBE
+os.environ.setdefault("FFMPEG", FF); os.environ.setdefault("FFPROBE", FFPROBE)
+import look
 
 PUNCT = "、。，．！？!?"
 
@@ -65,9 +69,19 @@ def main():
     sheets = sorted(qa.glob("sheet_*.jpg"))
     print("\n".join(["■ 記録"] + [" - " + n for n in notes]))
     print("\n".join(["■ 直すこと"] + ([" - " + p for p in probs] or [" - なし"])))
+    texts = out.with_name(f"{out.stem}_texts.json")
+    if texts.exists():
+        items = look.load_texts(texts)
+        look.print_read(look.read_check(items), len(items))
+    else:
+        print("■ 読み切れるかの検査：文字の時刻表が無いので飛ばした（assemble.py で書き出し直すとできる）")
     print(f"■ 目で見る一覧（{every}秒ごと・{len(sheets)}枚・左上から右へ時間順）")
     for s in sheets:
         print(" ", s)
+    if "--quick" not in sys.argv:
+        segs = look.load_segments(ep / "timeline.json")
+        look.cuts(str(out), segs, qa)
+        look.fast(str(out), 3, segs, out=qa)
 
 
 if __name__ == "__main__":

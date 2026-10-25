@@ -277,15 +277,16 @@ function startAudio(from) {
     const s = ctx.createBufferSource(); s.buffer = b; s.connect(g).connect(ctx.destination); s.start(t0 + x.t + off, off); live_src.push(s);
   }
   if (bgmEl) {
-    const base = db(-9), duck = db(-20), g = bgmGain.gain; g.cancelScheduledValues(0);
+    const base = db(-9), duck = db(-20), low = db(-45), g = bgmGain.gain; g.cancelScheduledValues(0);
+    const hush = D.hush || [];   // 静かな間（行の "hush"）：BGM をほぼ消す
     const speaking = (tt) => D.voice.some((v) => tt >= v.start - 0.1 && tt < v.start + (v.out - v.in));
-    g.setValueAtTime(speaking(from) ? duck : base, now);
-    for (const v of D.voice) {
-      const a = v.start - 0.1, b = v.start + (v.out - v.in);
-      if (b <= from) continue;
-      if (a > from) g.setTargetAtTime(duck, t0 + a, 0.04);
-      g.setTargetAtTime(base, t0 + b, 0.15);
-    }
+    const hushed = (tt) => hush.some(([a, b]) => tt >= a && tt < b);
+    g.setValueAtTime(speaking(from) ? duck : hushed(from) ? low : base, now);
+    const ev = [];
+    for (const v of D.voice) ev.push([v.start - 0.1, duck, 0.04], [v.start + (v.out - v.in), base, 0.15]);
+    for (const [a] of hush) ev.push([a, low, 0.12]);
+    ev.sort((x, y) => x[0] - y[0]);
+    for (const [tt, val, tc] of ev) if (tt > from) g.setTargetAtTime(val, t0 + tt, tc);
     bgmEl.currentTime = from; bgmEl.play().catch(() => {});
   }
 }
